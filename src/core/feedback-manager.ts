@@ -480,7 +480,26 @@ export class FeedbackManager {
   }
 
   /**
+   * Parse Data URI (data:application/json;base64,XXX) and return parsed JSON
+   * Returns empty object if parsing fails or URI is not a valid Data URI
+   */
+  private _parseDataURI(dataUri: string): Record<string, any> {
+    try {
+      // Match data:application/json;base64,XXX format
+      const match = dataUri.match(/^data:application\/json;base64,(.+)$/);
+      if (match && match[1]) {
+        const jsonStr = Buffer.from(match[1], 'base64').toString('utf8');
+        return JSON.parse(jsonStr);
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return {};
+  }
+
+  /**
    * Map subgraph feedback data to Feedback model
+   * Supports both IPFS URIs (parsed by Subgraph) and Data URIs (parsed client-side)
    */
   private _mapSubgraphFeedbackToModel(
     feedbackData: any,
@@ -488,7 +507,16 @@ export class FeedbackManager {
     clientAddress: Address,
     feedbackIndex: number
   ): Feedback {
-    const feedbackFile = feedbackData.feedbackFile || {};
+    let feedbackFile = feedbackData.feedbackFile || {};
+
+    // If feedbackFile is empty but we have a Data URI, parse it client-side
+    // This supports Agent8Token and other contracts that use Data URIs instead of IPFS
+    if (
+      Object.keys(feedbackFile).length === 0 &&
+      feedbackData.feedbackURI?.startsWith('data:')
+    ) {
+      feedbackFile = this._parseDataURI(feedbackData.feedbackURI);
+    }
 
     // Map responses
     const responsesData = feedbackData.responses || [];
